@@ -164,3 +164,7 @@ python3 -m venv .venv && .venv/bin/pip install platformio
 ```
 
 A firmware file can also be uploaded on the web page.
+
+## Licence
+
+[Apache License 2.0](LICENSE).
