@@ -15,6 +15,7 @@
 #include "bus_task.h"
 #include "bwa_hub.h"
 #include "bwa_net.h"
+#include "ota_guard.h"
 #include "settings.h"
 #include "version.h"
 #include "web.h"
@@ -145,6 +146,7 @@ void save_found_polarity() {
 
 void setup() {
   Serial.begin(115200);
+  ota_guard_begin();
   settings.load();
   Serial.printf("\nspa bridge %s on %s, mode %s\n", FIRMWARE_VERSION, BOARD_NAME,
                 bwa::mode_name(settings.mode));
@@ -164,6 +166,8 @@ void setup() {
   xTaskCreatePinnedToCore(net_task, "net", 6144, nullptr, 5, nullptr, 0);
   web_start(settings, hub, net);
 
+  // Starting another update proves this firmware works: keep it first.
+  ArduinoOTA.onStart([] { ota_guard_confirm("new update starting"); });
   ArduinoOTA.setHostname(settings.hostname.c_str());
   if (!settings.admin_pass.isEmpty()) ArduinoOTA.setPassword(settings.admin_pass.c_str());
   ArduinoOTA.begin();
@@ -174,6 +178,8 @@ void loop() {
   web_loop();
   ArduinoOTA.handle();
   keep_wifi();
+  // Reachable: on the network, or someone is on the bridge's own access point.
+  ota_guard_loop(WiFi.isConnected() || (ap_on && WiFi.softAPgetStationNum() > 0));
   show_led();
   save_found_polarity();
   delay(2);

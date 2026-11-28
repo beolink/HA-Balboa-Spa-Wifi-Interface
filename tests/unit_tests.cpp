@@ -8,6 +8,7 @@
 #include "bwa_frame.h"
 #include "bwa_hub.h"
 #include "bwa_status.h"
+#include "ota_policy.h"
 
 using namespace bwa;
 
@@ -541,6 +542,43 @@ void test_hub_status_push_and_throttle() {
   CHECK(snap.status.valid && snap.status.water == 12.5f && snap.clients == 3);
 }
 
+// ----------------------------------------------------------- update policy
+
+void test_ota_confirms_once_online_long_enough() {
+  OtaPolicy p;
+  CHECK(p.step(false, 1000) == OtaAction::kNone);
+  CHECK(p.step(true, 20000) == OtaAction::kNone);   // online from 20 s
+  CHECK(p.step(true, 79000) == OtaAction::kNone);   // 59 s online
+  CHECK(p.step(true, 80000) == OtaAction::kNone);   // 60 s online, but up only 80 s
+  CHECK(p.step(true, 90000) == OtaAction::kConfirm);
+}
+
+void test_ota_online_must_be_unbroken() {
+  OtaPolicy p;
+  CHECK(p.step(true, 10000) == OtaAction::kNone);
+  CHECK(p.step(false, 60000) == OtaAction::kNone);  // dropped off
+  CHECK(p.step(true, 65000) == OtaAction::kNone);   // the clock starts again
+  CHECK(p.step(true, 120000) == OtaAction::kNone);  // 55 s
+  CHECK(p.step(true, 125000) == OtaAction::kConfirm);
+}
+
+void test_ota_rolls_back_when_never_online() {
+  OtaPolicy p;
+  CHECK(p.step(false, 300000) == OtaAction::kNone);
+  CHECK(p.step(false, 599999) == OtaAction::kNone);
+  CHECK(p.step(false, 600000) == OtaAction::kRollBack);
+}
+
+void test_ota_online_at_the_deadline_gets_its_minute() {
+  OtaPolicy p;
+  CHECK(p.step(true, 590000) == OtaAction::kNone);
+  CHECK(p.step(true, 620000) == OtaAction::kNone);  // past the deadline but online
+  CHECK(p.step(true, 650000) == OtaAction::kConfirm);
+  OtaPolicy q;
+  CHECK(q.step(true, 590000) == OtaAction::kNone);
+  CHECK(q.step(false, 610000) == OtaAction::kRollBack);  // lost it again
+}
+
 }  // namespace
 
 int main() {
@@ -565,6 +603,10 @@ int main() {
   test_module_identification_and_discovery();
   test_hub_forwards_or_answers_from_cache();
   test_hub_status_push_and_throttle();
+  test_ota_confirms_once_online_long_enough();
+  test_ota_online_must_be_unbroken();
+  test_ota_rolls_back_when_never_online();
+  test_ota_online_at_the_deadline_gets_its_minute();
   std::printf("%d checks, %d failed\n", checks, failures);
   return failures ? 1 : 0;
 }

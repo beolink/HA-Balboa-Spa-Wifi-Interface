@@ -20,7 +20,7 @@ The bridge differs from the stock module in four ways:
 * **Open to inspection.** A web page shows the bus state, the spa's status, the time it
   took to answer each Clear to Send, and a log of bus traffic.
 
-> Status: 0.1.0. The protocol core, the network side and the integration have been
+> Status: 0.2.0. The protocol core, the network side and the integration have been
 > tested together in a simulator (below). The firmware builds for the boards listed
 > below. It has **not yet been on a real spa bus**. Start in listen-only mode.
 
@@ -114,6 +114,31 @@ The integrations identify a spa by the MAC that the module reports in its
 identification message. Set *MAC reported to clients* to the stock module's MAC, for
 example `00:15:27:12:34:56`. Then point the existing entry at the bridge's address.
 The entry, its entities and their history stay as they are.
+
+## Updating over Wi-Fi
+
+After the first flash over USB the bridge never needs a visit to be updated:
+
+* **Web page:** *Firmware*, upload `.pio/build/<environment>/firmware.bin`. This
+  works wherever port 80 of the bridge can be reached: the home network, or a VPN
+  into it. It needs the admin password, if one is set.
+* **PlatformIO:** `.venv/bin/pio run -e <environment> -t upload --upload-port spa-bridge.local`.
+  The bridge connects back to the computer for this, so use it on the same network.
+  Over a VPN the web page is the one that always works.
+
+Settings survive an update, and so does the bus channel: the bridge takes its old
+channel back after the restart.
+
+A new update starts **on trial**. It stays once it has been on the network for a
+minute without a break and has been running for 90 seconds. The bridge's own access
+point counts as the network while someone is connected to it. Until then the
+bootloader keeps the previous firmware ready. If the new one crashes, hangs or
+restarts before that, the bootloader starts the previous one again. It does the same
+if the new one is still not online after ten minutes. The web page then says that the
+last update was rolled back. Saving settings, restarting from the web page or
+starting another update keeps the running firmware at once. Rolling back needs an
+older firmware in the other slot. Right after the first flash over USB there may be
+none, and then the bridge keeps the new one.
 
 ## Status LED
 

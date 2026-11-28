@@ -5,6 +5,7 @@
 #include <WiFi.h>
 
 #include "bus_task.h"
+#include "ota_guard.h"
 #include "version.h"
 
 namespace {
@@ -76,6 +77,11 @@ void handle_status() {
   j.reserve(1600);
   j += "{\"firmware\":\"" FIRMWARE_VERSION "\",\"board\":\"" BOARD_NAME "\"";
   j += ",\"uptime_s\":" + String(millis() / 1000);
+  const OtaReport ota = ota_guard_report();
+  j += ",\"update\":{\"on_trial\":" + String(ota.on_trial ? "true" : "false");
+  j += ",\"trial_left_s\":" + String(ota.trial_left_s);
+  j += ",\"rolled_back\":" + String(ota.rolled_back ? "true" : "false");
+  j += ",\"confirmed_by\":\"" + json_escape(ota.confirmed_by) + "\"}";
   j += ",\"wifi\":{\"connected\":" + String(WiFi.isConnected() ? "true" : "false");
   j += ",\"ssid\":\"" + json_escape(WiFi.SSID()) + "\",\"ip\":\"" + WiFi.localIP().toString() + "\"";
   j += ",\"rssi\":" + String(WiFi.RSSI()) + ",\"hostname\":\"" + json_escape(settings->hostname) + "\"}";
@@ -197,6 +203,7 @@ void handle_settings() {
   settings->save();
   apply_hub_settings();
   if (restart) {
+    ota_guard_confirm("settings saved on the web page");
     server.send(200, "text/plain", "Saved. Restarting to join the network...");
     delay(500);
     ESP.restart();
@@ -207,6 +214,7 @@ void handle_settings() {
 
 void handle_reboot() {
   if (!authorized()) return;
+  ota_guard_confirm("restart from the web page");
   server.send(200, "text/plain", "Restarting...");
   delay(300);
   ESP.restart();
@@ -229,7 +237,10 @@ void handle_update_upload() {
   if (up.status == UPLOAD_FILE_START) {
     upload_ok = settings->admin_pass.isEmpty() ||
                 server.authenticate("admin", settings->admin_pass.c_str());
-    if (upload_ok) upload_ok = Update.begin(UPDATE_SIZE_UNKNOWN);
+    if (upload_ok) {
+      ota_guard_confirm("new update starting");
+      upload_ok = Update.begin(UPDATE_SIZE_UNKNOWN);
+    }
   } else if (up.status == UPLOAD_FILE_WRITE) {
     if (upload_ok && Update.write(up.buf, up.currentSize) != up.currentSize) upload_ok = false;
   } else if (up.status == UPLOAD_FILE_END) {
@@ -299,7 +310,9 @@ async function tick(){
    +row('Pumps',p.pumps.join(', '))+row('Light / blower',`${p.light?'on':'off'} / ${p.blower}`)
    +row('Heating',['off','heating','waiting'][p.heating]+(p.high_range?', high range':', low range')):'')
    +row('MAC reported',p.mac);
-  $('net').innerHTML=row('Wi-Fi',w.connected?`${w.ssid} (${w.rssi} dBm) ${w.ip}`:'not connected',w.connected?'':'bad')
+  const u=s.update;
+  $('net').innerHTML=row('Firmware',u.on_trial?`new update on trial: kept once online for a minute, otherwise back to the previous one in ${u.trial_left_s} s`:(u.rolled_back?'the last update did not come online and was rolled back; this is the one before it':(u.confirmed_by?`update kept (${u.confirmed_by})`:'running')),u.on_trial||u.rolled_back?'warn':'')
+   +row('Wi-Fi',w.connected?`${w.ssid} (${w.rssi} dBm) ${w.ip}`:'not connected',w.connected?'':'bad')
    +row('Clients on 4257',`${t.clients} (${t.refused} refused, ${t.slow_drops} too slow)`)
    +row('From clients',`${t.client_frames} frames, ${t.to_bus} to the bus, ${t.cache_answers} answered from what was heard (${t.cache_misses} not), ${t.dropped_type} not passed on`)
    +row('Discovery answers',t.discoveries);
