@@ -30,26 +30,34 @@ The bridge differs from the stock module in four ways:
 | --- | --- | --- |
 | M5Stack AtomS3 Lite + Atomic RS485 Base | `atoms3-lite` | Recommended. Enclosed. The base takes the spa's 12-15 V and has an auto-direction transceiver. UART on GPIO 5 (RX) and 6 (TX). LED on 35. |
 | M5Stack Atom Lite + Atomic RS485 Base | `atom-lite` | Same base. UART on GPIO 22 (RX) and 19 (TX). LED on 27. |
+| Waveshare ESP32-S3-RS485-CAN ("Industrial ESP32-S3 Control Board with RS485 and CAN") | `waveshare-s3-rs485-can` | Everything in one box for rail mounting (91.6 × 23.3 × 58.7 mm). Takes 7-36 V on its power terminal, so it runs straight off the spa. RS-485 side galvanically isolated. The SP3485 has no automatic direction: GPIO 21 is DE (high = send), driven by the UART's RS-485 mode; UART on GPIO 18 (RX) and 17 (TX). 16 MB flash. No status LED; its own RS-485 LEDs show traffic (green send, blue receive). Pins from Waveshare's schematic. Not the 1-channel relay model: that one takes 5 V only. |
 | Any ESP32 + 3.3 V RS-485 module (MAX3485/SP3485) + buck converter | `esp32dev` | Set the pins in `platformio.ini`. Set `BUS_DE_PIN` if the module needs a driver-enable line. |
 
 Check that the base or converter can take about 16 V. One owner measured 15.9 V on
 the bus supply.
+
+Waveshare's FAQ says not to power the ESP32-S3-RS485-CAN from its terminal and USB-C
+at the same time. Flash it over USB-C before it goes into the spa, and update it over
+Wi-Fi after that. Leave its 120 Ω termination jumper open as delivered.
 
 ### Connecting to the spa
 
 **Switch the spa off at the breaker before opening the pack.** The bus connector is low
 voltage, but mains runs next to it.
 
-The main board's client connector is a 4-pin Molex 43025-0400 / TE 794617-4 style
-plug, the one the Wi-Fi module and panels use. Use a free socket on the board or a
-Y-splitter.
+The main board's client connector is a 4-pin Molex Micro-Fit 3.0 (2 × 2, 3.0 mm
+pitch). The cable end is a Molex 43025-0400 / TE 794617-4 receptacle with 43030
+crimp terminals. On BP-series boards (BP200G2, BP2100G1, BP6013G1-G3 per Balboa's
+tech sheets) the ports are J34 and J35, marked MAIN, shared by the top-side panel
+and the Wi-Fi module. With both in use, add a Y-splitter: Balboa 25657, or a
+Micro-Fit 3.0 extension with a third lead spliced in.
 
-| Pin | Signal | To the bridge |
-| --- | --- | --- |
-| 1 | +12-15 V | supply in (12 V terminal on the Atomic base) |
-| 2 | RS-485 B | B |
-| 3 | RS-485 A | A |
-| 4 | Ground | GND |
+| Pin | Signal | Atomic RS485 Base | Waveshare ESP32-S3-RS485-CAN |
+| --- | --- | --- | --- |
+| 1 | +12-15 V | 12 V terminal | power terminal + |
+| 2 | RS-485 B | B | RS485 B- |
+| 3 | RS-485 A | A | RS485 A+ |
+| 4 | Ground | GND | power terminal − (its RS-485 side is isolated and needs no ground) |
 
 The pin order comes from the community wiki and wire colours vary, so measure with a
 meter first. Pin 1 to pin 4 should read 12-15 V. A and B each sit at 2-3 V, with B
@@ -62,7 +70,8 @@ restart.
 
 ## First start
 
-1. Build and flash over USB:
+1. Build and flash over USB, with the environment for your board from the table
+   above:
 
    ```bash
    .venv/bin/pio run -e atoms3-lite -t upload
@@ -107,6 +116,8 @@ example `00:15:27:12:34:56`. Then point the existing entry at the bridge's addre
 The entry, its entities and their history stay as they are.
 
 ## Status LED
+
+On the M5Stack boards. The Waveshare board has none; use the web page.
 
 | Colour | Meaning |
 | --- | --- |
